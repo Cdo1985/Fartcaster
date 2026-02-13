@@ -1,15 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Upload, Trophy, Zap, Volume2, Play, Pause, Trash2, Star } from 'lucide-react';
+import { NeynarContextProvider, NeynarSigninButton, Theme } from "@neynar/react";
+import "@neynar/react/dist/style.css";
 
-function App() {
+// --- REPLACE THIS WITH YOUR NEYNAR CLIENT ID ---
+const CLIENT_ID = "YOUR_CLIENT_ID_HERE"; 
+
+function AppContent() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordings, setRecordings] = useState([]);
   const [userTokens, setUserTokens] = useState(0);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [playingId, setPlayingId] = useState(null);
-  const [username, setUsername] = useState('');
-  const [showUsernameInput, setShowUsernameInput] = useState(true);
+  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   
   const mediaRecorderRef = useRef(null);
@@ -18,65 +22,37 @@ function App() {
   const audioRef = useRef(null); 
   const fileInputRef = useRef(null);
 
-  // Initialize Audio and Load data on mount
   useEffect(() => {
-    // Only runs in the browser
     audioRef.current = new Audio();
-    
     const loadData = () => {
       try {
         const savedRecordings = localStorage.getItem('fartcaster-recordings');
         const savedTokens = localStorage.getItem('fartcaster-tokens');
-        const savedUsername = localStorage.getItem('fartcaster-username');
+        const savedUser = localStorage.getItem('fartcaster-user');
 
         if (savedRecordings) setRecordings(JSON.parse(savedRecordings));
         if (savedTokens) setUserTokens(parseInt(savedTokens));
-        if (savedUsername) {
-          setUsername(savedUsername);
-          setShowUsernameInput(false);
-        }
-      } catch (error) {
-        console.log('First time user or localStorage blocked');
-      }
+        if (savedUser) setUser(JSON.parse(savedUser));
+      } catch (e) { console.log(e); }
       setIsLoading(false);
     };
-
     loadData();
 
-    // The fix for Line 174: Use a local variable for cleanup
     const currentAudio = audioRef.current;
-
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.src = "";
-      }
+      if (currentAudio) { currentAudio.pause(); currentAudio.src = ""; }
     };
   }, []);
 
-  // Handle audio end event
-  useEffect(() => {
-    const currentAudio = audioRef.current;
-    if (currentAudio) {
-      currentAudio.onended = () => setPlayingId(null);
-    }
-  }, [audioRef.current]);
-
-  const saveData = (newRecordings, newTokens) => {
-    try {
-      localStorage.setItem('fartcaster-recordings', JSON.stringify(newRecordings));
-      localStorage.setItem('fartcaster-tokens', newTokens.toString());
-    } catch (error) {
-      console.error('Error saving data:', error);
-    }
+  const handleSigninSuccess = (user) => {
+    setUser(user);
+    localStorage.setItem('fartcaster-user', JSON.stringify(user));
   };
 
-  const handleUsernameSubmit = () => {
-    if (username.trim()) {
-      setShowUsernameInput(false);
-      localStorage.setItem('fartcaster-username', username);
-    }
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('fartcaster-user');
   };
 
   const startRecording = async () => {
@@ -84,202 +60,116 @@ function App() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
       audioChunksRef.current = [];
-
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
-      };
-
+      mediaRecorderRef.current.ondataavailable = (e) => audioChunksRef.current.push(e.data);
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        saveRecording(audioUrl, recordingDuration);
+        saveRecording(URL.createObjectURL(audioBlob), recordingDuration);
         stream.getTracks().forEach(track => track.stop());
       };
-
       mediaRecorderRef.current.start();
       setIsRecording(true);
       setRecordingDuration(0);
-      
-      intervalRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 0.1);
-      }, 100);
-    } catch (error) {
-      alert('Microphone access denied! Vercel requires HTTPS to use the mic.');
-    }
+      intervalRef.current = setInterval(() => setRecordingDuration(p => p + 0.1), 100);
+    } catch (err) { alert('Mic blocked!'); }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      clearInterval(intervalRef.current);
     }
   };
 
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file && file.type.startsWith('audio/')) {
-      const audioUrl = URL.createObjectURL(file);
-      const audio = new Audio(audioUrl);
-      
-      audio.addEventListener('loadedmetadata', () => {
-        saveRecording(audioUrl, audio.duration);
-      });
-    } else {
-      alert('Please upload an audio file!');
-    }
-  };
-
-  const saveRecording = (audioUrl, duration) => {
-    const earnedTokens = Math.floor(duration * 15) + Math.floor(Math.random() * 25) + 10;
-    
-    const newRecording = {
+  const saveRecording = (url, duration) => {
+    const earned = Math.floor(duration * 15) + 15;
+    const newRec = {
       id: Date.now(),
-      user: username,
-      audioUrl: audioUrl,
-      duration: Number(duration).toFixed(1),
-      tokens: earnedTokens,
+      user: user?.username || "Anon",
+      audioUrl: url,
+      duration: duration.toFixed(1),
+      tokens: earned,
       timestamp: new Date().toLocaleTimeString(),
       plays: 0,
       rating: (Math.random() * 2 + 3).toFixed(1)
     };
-    
-    const updatedRecordings = [newRecording, ...recordings].slice(0, 20);
-    const updatedTokens = userTokens + earnedTokens;
-    
-    setRecordings(updatedRecordings);
-    setUserTokens(updatedTokens);
-    saveData(updatedRecordings, updatedTokens);
-    
+    const updated = [newRec, ...recordings].slice(0, 20);
+    setRecordings(updated);
+    setUserTokens(prev => prev + earned);
+    localStorage.setItem('fartcaster-recordings', JSON.stringify(updated));
+    localStorage.setItem('fartcaster-tokens', (userTokens + earned).toString());
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
   };
 
-  const togglePlay = (recording) => {
-    if (!audioRef.current) return;
-
-    if (playingId === recording.id) {
+  const togglePlay = (rec) => {
+    if (playingId === rec.id) {
       audioRef.current.pause();
       setPlayingId(null);
     } else {
-      audioRef.current.src = recording.audioUrl;
+      audioRef.current.src = rec.audioUrl;
       audioRef.current.play();
-      setPlayingId(recording.id);
-      
-      const updatedRecordings = recordings.map(r => 
-        r.id === recording.id ? { ...r, plays: r.plays + 1 } : r
-      );
-      setRecordings(updatedRecordings);
-      saveData(updatedRecordings, userTokens);
+      setPlayingId(rec.id);
     }
   };
 
-  const deleteRecording = (id) => {
-    const updatedRecordings = recordings.filter(r => r.id !== id);
-    setRecordings(updatedRecordings);
-    saveData(updatedRecordings, userTokens);
-  };
+  if (isLoading) return <div className="min-h-screen bg-purple-900 flex items-center justify-center text-white">Loading...</div>;
 
-  if (isLoading) {
+  if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900 flex items-center justify-center">
-        <div className="text-white text-2xl font-bold">💨 Loading FartCaster...</div>
-      </div>
-    );
-  }
-
-  if (showUsernameInput) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900 flex items-center justify-center p-6">
-        <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 border border-white/20 max-w-md w-full">
-          <h1 className="text-5xl font-bold mb-4 text-center text-white">💨 FartCaster</h1>
-          <p className="text-purple-200 text-center mb-6">Choose your username to start</p>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleUsernameSubmit()}
-            placeholder="Enter username..."
-            className="w-full px-4 py-3 rounded-lg bg-white/20 text-white border border-white/30 mb-4"
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 to-pink-900 flex items-center justify-center p-6 text-center">
+        <div className="bg-white/10 backdrop-blur-lg p-8 rounded-3xl border border-white/20">
+          <h1 className="text-5xl font-bold text-white mb-6">💨 FartCaster</h1>
+          <p className="text-purple-200 mb-8">Sign in with Farcaster to start earning $FART</p>
+          <NeynarSigninButton 
+            clientId={CLIENT_ID} 
+            successCallback={handleSigninSuccess} 
           />
-          <button
-            onClick={handleUsernameSubmit}
-            disabled={!username.trim()}
-            className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg"
-          >
-            Start Casting
-          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900 text-white p-6">
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 to-pink-900 text-white p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-6xl font-extrabold mb-2">💨 FARTCASTER</h1>
-          <div className="mt-4 inline-flex items-center gap-2 bg-yellow-500 text-purple-900 px-6 py-3 rounded-full font-bold text-xl">
-            <Zap className="w-6 h-6 fill-purple-900" />
-            {userTokens} FART Tokens
-          </div>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 mb-8 border border-white/20">
-          <h2 className="text-2xl font-bold mb-4 text-center">Cast Your Fart</h2>
-          <div className="flex flex-col items-center gap-6">
-            {isRecording && (
-              <div className="text-6xl font-mono text-yellow-300 animate-pulse bg-black/20 px-6 py-2 rounded-xl">
-                {recordingDuration.toFixed(1)}s
-              </div>
-            )}
-            <div className="flex gap-4">
-              {!isRecording ? (
-                <>
-                  <button onClick={startRecording} className="bg-red-500 rounded-full p-8 hover:scale-110 transition-transform">
-                    <Mic className="w-12 h-12" />
-                  </button>
-                  <button onClick={() => fileInputRef.current?.click()} className="bg-purple-500 rounded-full p-8 hover:scale-110 transition-transform">
-                    <Upload className="w-12 h-12" />
-                  </button>
-                  <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
-                </>
-              ) : (
-                <button onClick={stopRecording} className="bg-green-500 rounded-full px-12 py-8 text-xl font-bold animate-pulse">
-                  STOP & EARN
-                </button>
-              )}
+        <div className="flex justify-between items-center mb-8">
+            <div className="flex items-center gap-3">
+                <img src={user.pfp_url} className="w-10 h-10 rounded-full border-2 border-yellow-400" alt="pfp" />
+                <span className="font-bold">@{user.username}</span>
             </div>
+            <button onClick={logout} className="text-xs opacity-50 hover:opacity-100 underline">Logout</button>
+        </div>
+        
+        <div className="text-center mb-8">
+          <h1 className="text-6xl font-black mb-2">FARTCASTER</h1>
+          <div className="inline-flex items-center gap-2 bg-yellow-500 text-purple-900 px-6 py-2 rounded-full font-bold">
+            <Zap className="w-5 h-5 fill-purple-900" /> {userTokens} $FART
           </div>
         </div>
 
-        {showSuccess && (
-          <div className="bg-green-500 text-white rounded-2xl p-4 mb-6 text-center font-bold animate-bounce">
-            🎉 Fart successfully cast! 🎉
-          </div>
-        )}
+        <div className="bg-white/10 rounded-3xl p-8 border border-white/20 mb-8 flex flex-col items-center">
+          {isRecording && <div className="text-5xl font-mono text-yellow-300 mb-4 animate-pulse">{recordingDuration.toFixed(1)}s</div>}
+          {!isRecording ? (
+            <button onClick={startRecording} className="bg-red-500 p-10 rounded-full hover:scale-105 transition-transform">
+              <Mic className="w-12 h-12" />
+            </button>
+          ) : (
+            <button onClick={stopRecording} className="bg-green-500 px-10 py-8 rounded-full font-bold text-xl">STOP & CLAIM</button>
+          )}
+        </div>
 
         <div className="space-y-4">
-          <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-            <Trophy className="w-6 h-6 text-yellow-400" />
-            Top Casts ({recordings.length})
-          </h2>
-          {recordings.map((recording) => (
-            <div key={recording.id} className="bg-white/10 rounded-2xl p-6 border border-white/20 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="bg-purple-500 rounded-full w-12 h-12 flex items-center justify-center text-2xl">💨</div>
-                <div>
-                  <div className="font-bold">{recording.user}</div>
-                  <div className="text-purple-300 text-xs">{recording.timestamp}</div>
-                </div>
+          {recordings.map(rec => (
+            <div key={rec.id} className="bg-white/10 p-4 rounded-2xl flex justify-between items-center">
+              <div>
+                <div className="font-bold">@{rec.user}</div>
+                <div className="text-xs text-purple-300">{rec.duration}s • {rec.timestamp}</div>
               </div>
               <div className="flex items-center gap-4">
-                <div className="text-yellow-400 font-bold">+{recording.tokens} FART</div>
-                <button onClick={() => togglePlay(recording)} className="bg-white/20 rounded-full p-3">
-                  {playingId === recording.id ? <Pause /> : <Play />}
-                </button>
-                <button onClick={() => deleteRecording(recording.id)} className="text-red-400">
-                  <Trash2 />
+                <div className="text-yellow-400">+{rec.tokens}</div>
+                <button onClick={() => togglePlay(rec)} className="bg-white/20 p-3 rounded-full">
+                  {playingId === rec.id ? <Pause size={18} /> : <Play size={18} />}
                 </button>
               </div>
             </div>
@@ -290,4 +180,17 @@ function App() {
   );
 }
 
-export default App;
+// Wrapper for Neynar Context
+export default function App() {
+  return (
+    <NeynarContextProvider 
+      settings={{ 
+        clientId: CLIENT_ID, 
+        defaultTheme: Theme.Dark,
+        eventsCallbacks: { onSigninSuccess: () => {} } 
+      }}
+    >
+      <AppContent />
+    </NeynarContextProvider>
+  );
+}
