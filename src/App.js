@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Upload, Trophy, Zap, Volume2, Play, Pause, Trash2, Star } from 'lucide-react';
 
-export default function FartCaster() {
+function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordings, setRecordings] = useState([]);
   const [userTokens, setUserTokens] = useState(0);
@@ -18,52 +18,45 @@ export default function FartCaster() {
   const audioRef = useRef(new Audio());
   const fileInputRef = useRef(null);
 
-  // Load data from storage on mount
+  // Load data from localStorage on mount
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadData = async () => {
+  const loadData = () => {
     try {
-      const [recordingsResult, tokensResult, usernameResult] = await Promise.all([
-        window.storage.get('fartcaster-recordings'),
-        window.storage.get('fartcaster-tokens'),
-        window.storage.get('fartcaster-username')
-      ]);
+      const savedRecordings = localStorage.getItem('fartcaster-recordings');
+      const savedTokens = localStorage.getItem('fartcaster-tokens');
+      const savedUsername = localStorage.getItem('fartcaster-username');
 
-      if (recordingsResult?.value) {
-        setRecordings(JSON.parse(recordingsResult.value));
+      if (savedRecordings) {
+        setRecordings(JSON.parse(savedRecordings));
       }
-      if (tokensResult?.value) {
-        setUserTokens(parseInt(tokensResult.value));
+      if (savedTokens) {
+        setUserTokens(parseInt(savedTokens));
       }
-      if (usernameResult?.value) {
-        setUsername(usernameResult.value);
+      if (savedUsername) {
+        setUsername(savedUsername);
         setShowUsernameInput(false);
       }
     } catch (error) {
-      console.log('First time user, no data to load');
+      console.log('First time user');
     }
     setIsLoading(false);
   };
 
-  const saveData = async (newRecordings, newTokens) => {
+  const saveData = (newRecordings, newTokens) => {
     try {
-      await Promise.all([
-        window.storage.set('fartcaster-recordings', JSON.stringify(newRecordings)),
-        window.storage.set('fartcaster-tokens', newTokens.toString())
-      ]);
+      localStorage.setItem('fartcaster-recordings', JSON.stringify(newRecordings));
+      localStorage.setItem('fartcaster-tokens', newTokens.toString());
     } catch (error) {
       console.error('Error saving data:', error);
     }
   };
 
-  const saveUsername = async (name) => {
-    try {
-      await window.storage.set('fartcaster-username', name);
-    } catch (error) {
-      console.error('Error saving username:', error);
-    }
+  const saveUsername = (name) => {
+    localStorage.setItem('fartcaster-username', name);
   };
 
   const handleUsernameSubmit = () => {
@@ -160,7 +153,6 @@ export default function FartCaster() {
       audioRef.current.play();
       setPlayingId(recording.id);
       
-      // Increment plays
       const updatedRecordings = recordings.map(r => 
         r.id === recording.id ? { ...r, plays: r.plays + 1 } : r
       );
@@ -169,10 +161,10 @@ export default function FartCaster() {
     }
   };
 
-  const deleteRecording = async (id) => {
+  const deleteRecording = (id) => {
     const updatedRecordings = recordings.filter(r => r.id !== id);
     setRecordings(updatedRecordings);
-    await saveData(updatedRecordings, userTokens);
+    saveData(updatedRecordings, userTokens);
   };
 
   useEffect(() => {
@@ -221,7 +213,6 @@ export default function FartCaster() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-pink-900 text-white p-6">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold mb-2">💨 FartCaster</h1>
           <p className="text-purple-200 text-lg mb-2">Decentralized Flatulence Protocol</p>
@@ -232,7 +223,6 @@ export default function FartCaster() {
           </div>
         </div>
 
-        {/* Recording Section */}
         <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 mb-8 border border-white/20 shadow-2xl">
           <h2 className="text-2xl font-bold mb-4 text-center">Cast Your Fart</h2>
           
@@ -282,14 +272,12 @@ export default function FartCaster() {
           </div>
         </div>
 
-        {/* Success Message */}
         {showSuccess && (
           <div className="bg-green-500 text-white rounded-2xl p-4 mb-6 text-center font-bold animate-bounce shadow-lg">
             🎉 Fart successfully cast! Tokens earned! 🎉
           </div>
         )}
 
-        {/* Feed */}
         <div className="space-y-4">
           <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
             <Trophy className="w-6 h-6 text-yellow-400" />
@@ -361,10 +349,9 @@ export default function FartCaster() {
           )}
         </div>
 
-        {/* Footer */}
         <div className="mt-8 text-center text-purple-300 text-sm space-y-2">
           <p>🔗 Powered by the Ethereum Flatulence Network</p>
-          <p>⚠️ FART tokens stored locally... for now 💎</p>
+          <p>⚠️ FART tokens stored in your browser 💎</p>
           <button
             onClick={() => {
               setShowUsernameInput(true);
@@ -379,3 +366,5 @@ export default function FartCaster() {
     </div>
   );
 }
+
+export default App;
