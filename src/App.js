@@ -4,7 +4,7 @@ import { NeynarContextProvider, NeynarSigninButton, Theme } from "@neynar/react"
 import "@neynar/react/dist/style.css";
 
 // --- REPLACE THIS WITH YOUR NEYNAR CLIENT ID ---
-const CLIENT_ID = "YOUR_CLIENT_ID_HERE"; 
+const CLIENT_ID = 4b0a10cb-e22d-451e-85f9-427934a34ddc; 
 
 function AppContent() {
   const [isRecording, setIsRecording] = useState(false);
