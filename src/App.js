@@ -15,7 +15,7 @@ function AppContent() {
   const [playingId, setPlayingId] = useState(null);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const intervalRef = useRef(null);
